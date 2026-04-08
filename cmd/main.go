@@ -8,10 +8,13 @@ import (
 
 func main() {
 	ctx := context.Background()
-	_, err := app.New(ctx)
+	app, err := app.New()
 	if err != nil {
 		panic(err)
 	}
 
-	// Use the app instance 'a' to start your application logic
+	err = app.Run(ctx)
+	if err != nil {
+		panic(err)
+	}
 }
