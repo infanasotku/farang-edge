@@ -1,6 +1,10 @@
-package service
+package engine
 
-import "github.com/google/uuid"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 type EngineSpecState struct {
 	epoch      int64
@@ -16,14 +20,20 @@ type EngineSpec struct {
 }
 
 type EngineService struct {
-	spec *EngineSpec
+	spec   *EngineSpec
+	client *EngineHttpClient
 }
 
-func NewEngineService(engineId uuid.UUID) *EngineService {
+func NewService(engineId uuid.UUID, client *EngineHttpClient) *EngineService {
 	return &EngineService{
 		spec: &EngineSpec{
 			engineId: engineId,
 			state:    &EngineSpecState{instanceId: uuid.New()},
 		},
+		client: client,
 	}
+}
+
+func (svc *EngineService) Register(ctx context.Context) error {
+	return nil
 }

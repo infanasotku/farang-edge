@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/infanasotku/farang-edge/internal/config"
+	"github.com/infanasotku/farang-edge/internal/engine"
 	"github.com/infanasotku/farang-edge/internal/heartbeat"
-	"github.com/infanasotku/farang-edge/internal/service"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -25,7 +25,8 @@ func New() (*App, error) {
 }
 
 func (app *App) Run(ctx context.Context) error {
-	svc := service.NewEngineService(uuid.New())
+	client := engine.NewClient("http://localhost:8080")
+	svc := engine.NewService(uuid.New(), client)
 
 	g, ctx := errgroup.WithContext(ctx)
 

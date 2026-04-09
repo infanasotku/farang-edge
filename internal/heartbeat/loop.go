@@ -3,15 +3,16 @@ package heartbeat
 import (
 	"context"
 
-	"github.com/infanasotku/farang-edge/internal/service"
+	"github.com/infanasotku/farang-edge/internal/engine"
 	"github.com/sirupsen/logrus"
 )
 
-func Start(ctx context.Context, svc *service.EngineService, logger *logrus.Logger) error {
+func Start(ctx context.Context, svc *engine.EngineService, logger *logrus.Logger) error {
 	logger.Println("Registrating the engine in control plane...")
-	// 1. Register the engine in control plane
-
-	// end of registration
+	err := svc.Register(ctx)
+	if err != nil {
+		return err
+	}
 	logger.Println("Starting the heartbeat loop...")
 
 	process := func(ctx context.Context) {
