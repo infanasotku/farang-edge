@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ControlBaseUrl string
-	EngineId       string
+	ControlBaseUrl   string
+	ControlAuthToken string
+	EngineId         uuid.UUID
 }
 
 func mustEnv(key string) (string, error) {
@@ -33,8 +35,14 @@ func GetAppConfig() (*Config, error) {
 		return nil, err
 	}
 
+	controlAuthToken, err := mustEnv("CONTROL_AUTH_TOKEN")
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
-		ControlBaseUrl: controlBaseUrl,
-		EngineId:       engineId,
+		ControlBaseUrl:   controlBaseUrl,
+		ControlAuthToken: controlAuthToken,
+		EngineId:         uuid.MustParse(engineId),
 	}, nil
 }

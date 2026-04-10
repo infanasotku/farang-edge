@@ -16,7 +16,7 @@ func Start(ctx context.Context, svc *engine.EngineService, logger *logrus.Logger
 	logger.Println("Starting the heartbeat loop...")
 
 	process := func(ctx context.Context) {
-		logger.Println("Sending heartbeat...")
+		// logger.Println("Sending heartbeat...")
 	}
 
 	for {
