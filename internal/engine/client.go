@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,12 +30,22 @@ func NewClient(baseUrl string, authToken string) *EngineHttpClient {
 	}
 }
 
-func (c *EngineHttpClient) doRequest(ctx context.Context, url string, method string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+func (c *EngineHttpClient) doRequest(ctx context.Context, url string, method string, payload *map[string]any) (*http.Response, error) {
+	var body io.Reader
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("marshal payload: %w", err)
+		}
+		body = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", c.authToken)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -42,6 +53,17 @@ func (c *EngineHttpClient) doRequest(ctx context.Context, url string, method str
 	}
 
 	return resp, nil
+}
+
+func validate(resp *http.Response) error {
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 func parse(resp *http.Response, out any) error {
@@ -67,6 +89,7 @@ func (c *EngineHttpClient) RegisterInstance(ctx context.Context, engineId uuid.U
 		ctx,
 		c.baseUrl+"/api/v1/engines/"+engineId.String()+"/register-instance?instance_id="+instanceId.String(),
 		http.MethodPost,
+		nil,
 	)
 	if err != nil {
 		return -1, err
@@ -78,4 +101,36 @@ func (c *EngineHttpClient) RegisterInstance(ctx context.Context, engineId uuid.U
 	}
 
 	return registerResp.Epoch, nil
+}
+
+func (c *EngineHttpClient) SendHeartbeat(
+	ctx context.Context,
+	engineId uuid.UUID,
+	instanceId uuid.UUID,
+	epoch int64,
+	seq_no int64,
+	phase string,
+	generation int64,
+) error {
+	resp, err := c.doRequest(
+		ctx,
+		c.baseUrl+"/api/v1/engines/"+engineId.String()+"/heartbeat",
+		http.MethodPost,
+		&map[string]any{
+			"instance_id": instanceId.String(),
+			"epoch":       epoch,
+			"seq_no":      seq_no,
+			"phase":       phase,
+			"generation":  generation,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := validate(resp); err != nil {
+		return fmt.Errorf("validate response: %w", err)
+	}
+
+	return nil
 }
