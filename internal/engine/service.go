@@ -31,14 +31,14 @@ type EngineSpec struct {
 	enabled  bool
 }
 
-type EngineService struct {
+type Service struct {
 	spec    *EngineSpec
 	control ControlPlane
 	logger  *logrus.Entry
 }
 
-func New(engineId uuid.UUID, control ControlPlane, logger *logrus.Logger) *EngineService {
-	return &EngineService{
+func New(engineId uuid.UUID, control ControlPlane, logger *logrus.Logger) *Service {
+	return &Service{
 		spec: &EngineSpec{
 			engineId: engineId,
 			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1, phase: StatusStarting},
@@ -48,7 +48,7 @@ func New(engineId uuid.UUID, control ControlPlane, logger *logrus.Logger) *Engin
 	}
 }
 
-func (svc *EngineService) Register(ctx context.Context) error {
+func (svc *Service) Register(ctx context.Context) error {
 	epoch, err := svc.control.RegisterInstance(ctx, svc.spec.engineId, svc.spec.state.instanceId)
 	if err != nil {
 		return fmt.Errorf("register instance: %w", err)
@@ -59,7 +59,7 @@ func (svc *EngineService) Register(ctx context.Context) error {
 	return nil
 }
 
-func (svc *EngineService) SendHeartbeat(ctx context.Context) error {
+func (svc *Service) SendHeartbeat(ctx context.Context) error {
 	req := HeartbeatRequest{
 		EngineID:   svc.spec.engineId,
 		InstanceID: svc.spec.state.instanceId,
@@ -84,17 +84,30 @@ func (svc *EngineService) SendHeartbeat(ctx context.Context) error {
 	return nil
 }
 
-func (svc *EngineService) LoadSpec(ctx context.Context) error {
+func (svc *Service) LoadSpec(ctx context.Context) error {
 	specResp, err := svc.control.GetSpec(ctx, svc.spec.engineId)
 	if err != nil {
 		return fmt.Errorf("get spec: %w", err)
 	}
 
 	if specResp.Generation != svc.spec.state.generation {
-		svc.spec.config = specResp.Config
-		svc.spec.enabled = specResp.Enabled
-		svc.spec.state.generation = specResp.Generation
+		svc.logger.Printf(
+			"Spec generation changed from %d to %d, syncing spec...",
+			svc.spec.state.generation,
+			specResp.Generation,
+		)
+		svc.syncState(ctx, &specResp)
 	}
+
+	return nil
+}
+
+func (svc *Service) syncState(ctx context.Context, snapshot *SpecSnapshot) error {
+	svc.spec.config = snapshot.Config
+	svc.spec.enabled = snapshot.Enabled
+	svc.spec.state.generation = snapshot.Generation
+	// TODO: handle enabled/disabled state and config changes
+	svc.logger.Printf("Spec is synced with generation %d, enabled: %t", snapshot.Generation, snapshot.Enabled)
 
 	return nil
 }

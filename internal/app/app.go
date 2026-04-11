@@ -10,6 +10,7 @@ import (
 	"github.com/infanasotku/farang-edge/internal/controlapi"
 	"github.com/infanasotku/farang-edge/internal/engine"
 	"github.com/infanasotku/farang-edge/internal/heartbeat"
+	"github.com/infanasotku/farang-edge/internal/specsync"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -17,7 +18,7 @@ import (
 type App struct {
 	logger *logrus.Logger
 	config *config.Config
-	svc    *engine.EngineService
+	svc    *engine.Service
 }
 
 func New() (*App, error) {
@@ -39,11 +40,28 @@ func New() (*App, error) {
 }
 
 func (app *App) Run(ctx context.Context) error {
+	err := app.register(ctx)
+	if err != nil {
+		return fmt.Errorf("register: %w", err)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		return heartbeat.Start(ctx, app.svc, app.logger)
 	})
+	g.Go(func() error {
+		return specsync.Start(ctx, app.svc, app.logger)
+	})
 
 	return g.Wait()
+}
+
+func (app *App) register(ctx context.Context) error {
+	app.logger.Println("Registrating the engine in control plane...")
+	err := app.svc.Register(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }

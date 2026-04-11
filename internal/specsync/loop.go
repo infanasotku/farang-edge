@@ -1,4 +1,4 @@
-package heartbeat
+package specsync
 
 import (
 	"context"
@@ -8,22 +8,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var HEARTBEAT_INTERVAL = 15
+var SYNC_INTERVAL = 10
 
 func Start(ctx context.Context, svc *engine.Service, logger *logrus.Logger) error {
-	logger.Println("Starting the heartbeat loop...")
+	logger.Println("Starting the spec sync loop...")
 
 	process := func(ctx context.Context) error {
-		logger.Println("Sending heartbeat...")
-		return svc.SendHeartbeat(ctx)
+		logger.Println("Polling spec...")
+		return svc.LoadSpec(ctx)
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Println("Cancelling the heartbeat loop...")
+			logger.Println("Cancelling the spec sync loop...")
 			return nil
-		case <-time.After(time.Duration(HEARTBEAT_INTERVAL) * time.Second):
+		case <-time.After(time.Duration(SYNC_INTERVAL) * time.Second):
 			if err := process(ctx); err != nil {
 				return err
 			}
