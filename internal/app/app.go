@@ -11,6 +11,7 @@ import (
 	"github.com/infanasotku/farang-edge/internal/engine"
 	"github.com/infanasotku/farang-edge/internal/heartbeat"
 	"github.com/infanasotku/farang-edge/internal/specsync"
+	"github.com/infanasotku/farang-edge/internal/xray"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,7 +32,8 @@ func New() (*App, error) {
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	client := controlapi.New(config.ControlBaseUrl, config.ControlAuthToken, httpClient)
-	svc := engine.New(config.EngineId, client, logger)
+	xrayEngine := xray.New()
+	svc := engine.New(config.EngineId, client, xrayEngine, logger)
 
 	a := App{logger: logger, config: config, svc: svc}
 	logger.Println("App is created successfully!")

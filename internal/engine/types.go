@@ -22,7 +22,14 @@ type HeartbeatRequest struct {
 }
 
 type SpecSnapshot struct {
-	Config     map[string]any
+	Config     string
 	Enabled    bool
 	Generation int64
+}
+
+type Engine interface {
+	SetConfig(config string) error
+	Enable() error
+	Disable() error
+	IsEnabled() bool
 }

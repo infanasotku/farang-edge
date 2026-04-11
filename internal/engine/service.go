@@ -27,23 +27,25 @@ type EngineSpecState struct {
 type EngineSpec struct {
 	engineId uuid.UUID
 	state    *EngineSpecState
-	config   map[string]interface{}
+	config   string
 	enabled  bool
 }
 
 type Service struct {
 	spec    *EngineSpec
 	control ControlPlane
+	engine  Engine
 	logger  *logrus.Entry
 }
 
-func New(engineId uuid.UUID, control ControlPlane, logger *logrus.Logger) *Service {
+func New(engineId uuid.UUID, control ControlPlane, engine Engine, logger *logrus.Logger) *Service {
 	return &Service{
 		spec: &EngineSpec{
 			engineId: engineId,
 			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1, phase: StatusStarting},
 		},
 		control: control,
+		engine:  engine,
 		logger:  logger.WithField("service", "EngineService"),
 	}
 }
