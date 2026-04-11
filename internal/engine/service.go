@@ -32,24 +32,24 @@ type EngineSpec struct {
 }
 
 type EngineService struct {
-	spec   *EngineSpec
-	client *EngineHttpClient
-	logger *logrus.Entry
+	spec    *EngineSpec
+	control ControlPlane
+	logger  *logrus.Entry
 }
 
-func NewService(engineId uuid.UUID, client *EngineHttpClient, logger *logrus.Logger) *EngineService {
+func New(engineId uuid.UUID, control ControlPlane, logger *logrus.Logger) *EngineService {
 	return &EngineService{
 		spec: &EngineSpec{
 			engineId: engineId,
 			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1, phase: StatusStarting},
 		},
-		client: client,
-		logger: logger.WithField("service", "EngineService"),
+		control: control,
+		logger:  logger.WithField("service", "EngineService"),
 	}
 }
 
 func (svc *EngineService) Register(ctx context.Context) error {
-	epoch, err := svc.client.RegisterInstance(ctx, svc.spec.engineId, svc.spec.state.instanceId)
+	epoch, err := svc.control.RegisterInstance(ctx, svc.spec.engineId, svc.spec.state.instanceId)
 	if err != nil {
 		return fmt.Errorf("register instance: %w", err)
 	}
@@ -60,15 +60,15 @@ func (svc *EngineService) Register(ctx context.Context) error {
 }
 
 func (svc *EngineService) SendHeartbeat(ctx context.Context) error {
-	err := svc.client.SendHeartbeat(
-		ctx,
-		svc.spec.engineId,
-		svc.spec.state.instanceId,
-		svc.spec.state.epoch,
-		svc.spec.state.seq_no,
-		string(svc.spec.state.phase),
-		svc.spec.state.generation,
-	)
+	req := HeartbeatRequest{
+		EngineID:   svc.spec.engineId,
+		InstanceID: svc.spec.state.instanceId,
+		Epoch:      svc.spec.state.epoch,
+		SeqNo:      svc.spec.state.seq_no,
+		Phase:      svc.spec.state.phase,
+		Generation: svc.spec.state.generation,
+	}
+	err := svc.control.SendHeartbeat(ctx, req)
 	if err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
 	}
@@ -85,7 +85,7 @@ func (svc *EngineService) SendHeartbeat(ctx context.Context) error {
 }
 
 func (svc *EngineService) LoadSpec(ctx context.Context) error {
-	specResp, err := svc.client.GetSpec(ctx, svc.spec.engineId)
+	specResp, err := svc.control.GetSpec(ctx, svc.spec.engineId)
 	if err != nil {
 		return fmt.Errorf("get spec: %w", err)
 	}

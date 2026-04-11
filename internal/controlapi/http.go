@@ -1,4 +1,4 @@
-package engine
+package controlapi
 
 import (
 	"bytes"
@@ -9,28 +9,24 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/infanasotku/farang-edge/internal/engine"
 )
 
-type EngineHttpClient struct {
+type Client struct {
 	http      *http.Client
-	baseUrl   string
+	baseURL   string
 	authToken string
 }
 
-func NewClient(baseUrl string, authToken string) *EngineHttpClient {
-	transport := &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 10,
-	}
-
-	return &EngineHttpClient{
-		baseUrl:   baseUrl,
+func New(baseURL, authToken string, httpClient *http.Client) *Client {
+	return &Client{
+		http:      httpClient,
+		baseURL:   baseURL,
 		authToken: authToken,
-		http:      &http.Client{Transport: transport},
 	}
 }
 
-func (c *EngineHttpClient) doRequest(ctx context.Context, path string, method string, payload *map[string]any) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, path string, method string, payload *map[string]any) (*http.Response, error) {
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
@@ -40,7 +36,7 @@ func (c *EngineHttpClient) doRequest(ctx context.Context, path string, method st
 		body = bytes.NewReader(b)
 	}
 
-	url := c.baseUrl + "/api/v1/engines/" + path
+	url := c.baseURL + "/api/v1/engines/" + path
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -85,7 +81,7 @@ type registerInstanceResponse struct {
 	Epoch int64 `json:"epoch"`
 }
 
-func (c *EngineHttpClient) RegisterInstance(ctx context.Context, engineId uuid.UUID, instanceId uuid.UUID) (int64, error) {
+func (c *Client) RegisterInstance(ctx context.Context, engineId uuid.UUID, instanceId uuid.UUID) (int64, error) {
 	resp, err := c.doRequest(
 		ctx,
 		engineId.String()+"/register-instance?instance_id="+instanceId.String(),
@@ -104,25 +100,20 @@ func (c *EngineHttpClient) RegisterInstance(ctx context.Context, engineId uuid.U
 	return registerResp.Epoch, nil
 }
 
-func (c *EngineHttpClient) SendHeartbeat(
+func (c *Client) SendHeartbeat(
 	ctx context.Context,
-	engineId uuid.UUID,
-	instanceId uuid.UUID,
-	epoch int64,
-	seq_no int64,
-	phase string,
-	generation int64,
+	req engine.HeartbeatRequest,
 ) error {
 	resp, err := c.doRequest(
 		ctx,
-		engineId.String()+"/heartbeat",
+		req.EngineID.String()+"/heartbeat",
 		http.MethodPost,
 		&map[string]any{
-			"instance_id": instanceId.String(),
-			"epoch":       epoch,
-			"seq_no":      seq_no,
-			"phase":       phase,
-			"generation":  generation,
+			"instance_id": req.InstanceID.String(),
+			"epoch":       req.Epoch,
+			"seq_no":      req.SeqNo,
+			"phase":       req.Phase,
+			"generation":  req.Generation,
 		},
 	)
 	if err != nil {
@@ -136,28 +127,22 @@ func (c *EngineHttpClient) SendHeartbeat(
 	return nil
 }
 
-type getSpecResponse struct {
-	Config     map[string]interface{} `json:"config"`
-	Enabled    bool                   `json:"enabled"`
-	Generation int64                  `json:"generation"`
-	ConfigHash string                 `json:"config_hash"`
-}
-
-func (c *EngineHttpClient) GetSpec(ctx context.Context, engineId uuid.UUID) (*getSpecResponse, error) {
+func (c *Client) GetSpec(ctx context.Context, engineId uuid.UUID) (engine.SpecSnapshot, error) {
 	resp, err := c.doRequest(
 		ctx,
 		engineId.String()+"/spec",
 		http.MethodGet,
 		nil,
 	)
+	var specResp engine.SpecSnapshot
+
 	if err != nil {
-		return nil, err
+		return specResp, err
 	}
 
-	var specResp getSpecResponse
 	if err := parse(resp, &specResp); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+		return specResp, fmt.Errorf("parse response: %w", err)
 	}
 
-	return &specResp, nil
+	return specResp, nil
 }

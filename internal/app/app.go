@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/infanasotku/farang-edge/internal/config"
+	"github.com/infanasotku/farang-edge/internal/controlapi"
 	"github.com/infanasotku/farang-edge/internal/engine"
 	"github.com/infanasotku/farang-edge/internal/heartbeat"
 	"github.com/sirupsen/logrus"
@@ -14,6 +17,7 @@ import (
 type App struct {
 	logger *logrus.Logger
 	config *config.Config
+	svc    *engine.EngineService
 }
 
 func New() (*App, error) {
@@ -22,22 +26,23 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get app config: %w", err)
 	}
-	logger.Printf("App config: %+v", config)
+	logger.Printf("Config is loaded successfully! ControlBaseUrl: %s, EngineId: %s", config.ControlBaseUrl, config.EngineId)
 
-	a := App{logger: logger, config: config}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	client := controlapi.New(config.ControlBaseUrl, config.ControlAuthToken, httpClient)
+	svc := engine.New(config.EngineId, client, logger)
+
+	a := App{logger: logger, config: config, svc: svc}
 	logger.Println("App is created successfully!")
 
 	return &a, nil
 }
 
 func (app *App) Run(ctx context.Context) error {
-	client := engine.NewClient(app.config.ControlBaseUrl, app.config.ControlAuthToken)
-	svc := engine.NewService(app.config.EngineId, client, app.logger)
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return heartbeat.Start(ctx, svc, app.logger)
+		return heartbeat.Start(ctx, app.svc, app.logger)
 	})
 
 	return g.Wait()
