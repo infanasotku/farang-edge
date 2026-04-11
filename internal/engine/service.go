@@ -133,6 +133,16 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 		if err != nil {
 			return fmt.Errorf("enable engine: %w", err)
 		}
+	} else if configChanged && snapshot.Enabled {
+		svc.logger.Printf("Restarting engine due to config change...")
+		err := svc.engine.Disable()
+		if err != nil {
+			return fmt.Errorf("disable engine: %w", err)
+		}
+		err = svc.engine.Enable()
+		if err != nil {
+			return fmt.Errorf("enable engine: %w", err)
+		}
 	}
 
 	svc.logger.Printf("Spec is synced with generation %d, enabled: %t", snapshot.Generation, snapshot.Enabled)
