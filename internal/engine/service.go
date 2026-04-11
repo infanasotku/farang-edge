@@ -11,17 +11,19 @@ import (
 type Status string
 
 const (
-	StatusStarting Status = "starting"
-	StatusRunning  Status = "running"
-	StatusStopped  Status = "stopped"
+	StatusStarting   Status = "starting"
+	StatusRunning    Status = "running"
+	StatusIdle       Status = "idle"
+	StatusRolledback Status = "rolledback"
 )
 
 type EngineSpecState struct {
-	epoch      int64
-	generation int64
-	instanceId uuid.UUID
-	seq_no     int64
-	phase      Status
+	epoch             int64
+	generation        int64
+	maxSeenGeneration int64
+	failedGenerations map[int64]struct{}
+	instanceId        uuid.UUID
+	seq_no            int64
 }
 
 type EngineSpec struct {
@@ -43,7 +45,7 @@ func New(engineId uuid.UUID, control ControlPlane, engine Engine, logger *logrus
 	return &Service{
 		spec: &EngineSpec{
 			engineId: engineId,
-			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1, phase: StatusStarting},
+			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1},
 		},
 		control: control,
 		engine:  engine,
@@ -68,7 +70,7 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 		InstanceID: svc.spec.state.instanceId,
 		Epoch:      svc.spec.state.epoch,
 		SeqNo:      svc.spec.state.seq_no,
-		Phase:      svc.spec.state.phase,
+		Phase:      svc.getPhase(),
 		Generation: svc.spec.state.generation,
 	}
 	err := svc.control.SendHeartbeat(ctx, req)
@@ -80,7 +82,7 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 		"Sent heartbeat with epoch %d, seq_no %d, phase %s, generation %d",
 		svc.spec.state.epoch,
 		svc.spec.state.seq_no,
-		string(svc.spec.state.phase),
+		string(req.Phase),
 		svc.spec.state.generation,
 	)
 	svc.spec.state.seq_no += 1
@@ -106,46 +108,52 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 }
 
 func (svc *Service) syncState(snapshot *SpecSnapshot) error {
+	svc.spec.state.maxSeenGeneration = max(svc.spec.state.maxSeenGeneration, snapshot.Generation)
+
+	if _, exists := svc.spec.state.failedGenerations[snapshot.Generation]; exists {
+		svc.logger.Warningf("Skipping spec generation %d as it previously failed to apply", snapshot.Generation)
+		return nil
+	}
+
 	configChanged := snapshot.ConfigHash != svc.spec.configHash
+
+	err := svc.engine.Apply(snapshot.Config, snapshot.ConfigHash, snapshot.Enabled)
+	if err != nil {
+		if configChanged {
+			svc.logger.Printf("Failed to apply engine config, rolling back...")
+			rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
+			if rollbackErr != nil {
+				return fmt.Errorf("failed to rollback engine config: %w", rollbackErr)
+			} else {
+				svc.logger.Printf("Successfully rolled back to previous engine config")
+				svc.spec.state.failedGenerations[snapshot.Generation] = struct{}{}
+				return nil
+			}
+		} else {
+			return fmt.Errorf("apply engine config: %w", err)
+		}
+	}
 
 	svc.spec.config = snapshot.Config
 	svc.spec.configHash = snapshot.ConfigHash
 	svc.spec.enabled = snapshot.Enabled
 	svc.spec.state.generation = snapshot.Generation
-
-	if configChanged {
-		svc.logger.Printf("Config hash changed, updating engine config...")
-		err := svc.engine.SetConfig(snapshot.Config)
-		if err != nil {
-			return fmt.Errorf("set engine config: %w", err)
-		}
-	}
-
-	if svc.engine.IsEnabled() && !snapshot.Enabled {
-		svc.logger.Printf("Disabling engine due to spec change...")
-		err := svc.engine.Disable()
-		if err != nil {
-			return fmt.Errorf("disable engine: %w", err)
-		}
-	} else if !svc.engine.IsEnabled() && snapshot.Enabled {
-		svc.logger.Printf("Enabling engine due to spec change...")
-		err := svc.engine.Enable()
-		if err != nil {
-			return fmt.Errorf("enable engine: %w", err)
-		}
-	} else if configChanged && snapshot.Enabled {
-		svc.logger.Printf("Restarting engine due to config change...")
-		err := svc.engine.Disable()
-		if err != nil {
-			return fmt.Errorf("disable engine: %w", err)
-		}
-		err = svc.engine.Enable()
-		if err != nil {
-			return fmt.Errorf("enable engine: %w", err)
-		}
-	}
-
 	svc.logger.Printf("Spec is synced with generation %d, enabled: %t", snapshot.Generation, snapshot.Enabled)
 
 	return nil
+}
+
+func (svc *Service) getPhase() Status {
+	if svc.spec.state.generation == 0 {
+		return StatusStarting
+	}
+
+	if svc.spec.state.maxSeenGeneration > svc.spec.state.generation {
+		return StatusRolledback
+	}
+	if svc.spec.enabled {
+		return StatusRunning
+	}
+
+	return StatusIdle
 }

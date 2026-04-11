@@ -29,8 +29,6 @@ type SpecSnapshot struct {
 }
 
 type Engine interface {
-	SetConfig(config string) error
-	Enable() error
-	Disable() error
-	IsEnabled() bool
+	Apply(config string, configHash string, enabled bool) error
+	IsAlive() bool
 }
