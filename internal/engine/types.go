@@ -23,6 +23,7 @@ type HeartbeatRequest struct {
 
 type SpecSnapshot struct {
 	Config     string
+	ConfigHash string
 	Enabled    bool
 	Generation int64
 }

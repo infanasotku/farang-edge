@@ -127,6 +127,13 @@ func (c *Client) SendHeartbeat(
 	return nil
 }
 
+type getSpecResponse struct {
+	Config     string `json:"config"`
+	ConfigHash string `json:"config_hash"`
+	Enabled    bool   `json:"enabled"`
+	Generation int64  `json:"generation"`
+}
+
 func (c *Client) GetSpec(ctx context.Context, engineId uuid.UUID) (engine.SpecSnapshot, error) {
 	resp, err := c.doRequest(
 		ctx,
@@ -134,15 +141,20 @@ func (c *Client) GetSpec(ctx context.Context, engineId uuid.UUID) (engine.SpecSn
 		http.MethodGet,
 		nil,
 	)
-	var specResp engine.SpecSnapshot
+	var specResp getSpecResponse
 
 	if err != nil {
-		return specResp, err
+		return engine.SpecSnapshot{}, err
 	}
 
 	if err := parse(resp, &specResp); err != nil {
-		return specResp, fmt.Errorf("parse response: %w", err)
+		return engine.SpecSnapshot{}, fmt.Errorf("parse response: %w", err)
 	}
 
-	return specResp, nil
+	return engine.SpecSnapshot{
+		Config:     specResp.Config,
+		ConfigHash: specResp.ConfigHash,
+		Enabled:    specResp.Enabled,
+		Generation: specResp.Generation,
+	}, nil
 }

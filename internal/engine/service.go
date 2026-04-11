@@ -25,10 +25,11 @@ type EngineSpecState struct {
 }
 
 type EngineSpec struct {
-	engineId uuid.UUID
-	state    *EngineSpecState
-	config   string
-	enabled  bool
+	engineId   uuid.UUID
+	state      *EngineSpecState
+	config     string
+	configHash string
+	enabled    bool
 }
 
 type Service struct {
@@ -98,17 +99,42 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 			svc.spec.state.generation,
 			specResp.Generation,
 		)
-		svc.syncState(ctx, &specResp)
+		svc.syncState(&specResp)
 	}
 
 	return nil
 }
 
-func (svc *Service) syncState(ctx context.Context, snapshot *SpecSnapshot) error {
+func (svc *Service) syncState(snapshot *SpecSnapshot) error {
+	configChanged := snapshot.ConfigHash != svc.spec.configHash
+
 	svc.spec.config = snapshot.Config
+	svc.spec.configHash = snapshot.ConfigHash
 	svc.spec.enabled = snapshot.Enabled
 	svc.spec.state.generation = snapshot.Generation
-	// TODO: handle enabled/disabled state and config changes
+
+	if configChanged {
+		svc.logger.Printf("Config hash changed, updating engine config...")
+		err := svc.engine.SetConfig(snapshot.Config)
+		if err != nil {
+			return fmt.Errorf("set engine config: %w", err)
+		}
+	}
+
+	if svc.engine.IsEnabled() && !snapshot.Enabled {
+		svc.logger.Printf("Disabling engine due to spec change...")
+		err := svc.engine.Disable()
+		if err != nil {
+			return fmt.Errorf("disable engine: %w", err)
+		}
+	} else if !svc.engine.IsEnabled() && snapshot.Enabled {
+		svc.logger.Printf("Enabling engine due to spec change...")
+		err := svc.engine.Enable()
+		if err != nil {
+			return fmt.Errorf("enable engine: %w", err)
+		}
+	}
+
 	svc.logger.Printf("Spec is synced with generation %d, enabled: %t", snapshot.Generation, snapshot.Enabled)
 
 	return nil
