@@ -21,7 +21,6 @@ type EngineSpecState struct {
 	epoch             int64
 	generation        int64
 	maxSeenGeneration int64
-	failedGenerations map[int64]struct{}
 	instanceId        uuid.UUID
 	seq_no            int64
 }
@@ -101,7 +100,7 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 			svc.spec.state.generation,
 			specResp.Generation,
 		)
-		svc.syncState(&specResp)
+		return svc.syncState(&specResp)
 	}
 
 	return nil
@@ -110,28 +109,15 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	svc.spec.state.maxSeenGeneration = max(svc.spec.state.maxSeenGeneration, snapshot.Generation)
 
-	if _, exists := svc.spec.state.failedGenerations[snapshot.Generation]; exists {
-		svc.logger.Warningf("Skipping spec generation %d as it previously failed to apply", snapshot.Generation)
-		return nil
-	}
-
-	configChanged := snapshot.ConfigHash != svc.spec.configHash
-
 	err := svc.engine.Apply(snapshot.Config, snapshot.ConfigHash, snapshot.Enabled)
 	if err != nil {
-		if configChanged {
-			svc.logger.Printf("Failed to apply engine config, rolling back...")
-			rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
-			if rollbackErr != nil {
-				return fmt.Errorf("failed to rollback engine config: %w", rollbackErr)
-			} else {
-				svc.logger.Printf("Successfully rolled back to previous engine config")
-				svc.spec.state.failedGenerations[snapshot.Generation] = struct{}{}
-				return nil
-			}
-		} else {
-			return fmt.Errorf("apply engine config: %w", err)
+		svc.logger.Printf("Failed to apply new spec: %v, rolling back...", err)
+		rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback engine config: %w", rollbackErr)
 		}
+		svc.logger.Printf("Successfully rolled back to previous engine config")
+		return nil
 	}
 
 	svc.spec.config = snapshot.Config
