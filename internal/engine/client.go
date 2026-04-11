@@ -30,7 +30,7 @@ func NewClient(baseUrl string, authToken string) *EngineHttpClient {
 	}
 }
 
-func (c *EngineHttpClient) doRequest(ctx context.Context, url string, method string, payload *map[string]any) (*http.Response, error) {
+func (c *EngineHttpClient) doRequest(ctx context.Context, path string, method string, payload *map[string]any) (*http.Response, error) {
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
@@ -40,6 +40,7 @@ func (c *EngineHttpClient) doRequest(ctx context.Context, url string, method str
 		body = bytes.NewReader(b)
 	}
 
+	url := c.baseUrl + "/api/v1/engines/" + path
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -87,7 +88,7 @@ type registerInstanceResponse struct {
 func (c *EngineHttpClient) RegisterInstance(ctx context.Context, engineId uuid.UUID, instanceId uuid.UUID) (int64, error) {
 	resp, err := c.doRequest(
 		ctx,
-		c.baseUrl+"/api/v1/engines/"+engineId.String()+"/register-instance?instance_id="+instanceId.String(),
+		engineId.String()+"/register-instance?instance_id="+instanceId.String(),
 		http.MethodPost,
 		nil,
 	)
@@ -114,7 +115,7 @@ func (c *EngineHttpClient) SendHeartbeat(
 ) error {
 	resp, err := c.doRequest(
 		ctx,
-		c.baseUrl+"/api/v1/engines/"+engineId.String()+"/heartbeat",
+		engineId.String()+"/heartbeat",
 		http.MethodPost,
 		&map[string]any{
 			"instance_id": instanceId.String(),
@@ -133,4 +134,30 @@ func (c *EngineHttpClient) SendHeartbeat(
 	}
 
 	return nil
+}
+
+type getSpecResponse struct {
+	Config     map[string]interface{} `json:"config"`
+	Enabled    bool                   `json:"enabled"`
+	Generation int64                  `json:"generation"`
+	ConfigHash string                 `json:"config_hash"`
+}
+
+func (c *EngineHttpClient) GetSpec(ctx context.Context, engineId uuid.UUID) (*getSpecResponse, error) {
+	resp, err := c.doRequest(
+		ctx,
+		engineId.String()+"/spec",
+		http.MethodGet,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var specResp getSpecResponse
+	if err := parse(resp, &specResp); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &specResp, nil
 }
