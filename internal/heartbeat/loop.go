@@ -32,7 +32,6 @@ func Start(ctx context.Context, svc *engine.EngineService, logger *logrus.Logger
 			if err := process(ctx); err != nil {
 				return err
 			}
-
 		}
 	}
 }

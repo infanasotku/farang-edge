@@ -27,7 +27,7 @@ type EngineSpecState struct {
 type EngineSpec struct {
 	engineId uuid.UUID
 	state    *EngineSpecState
-	config   string
+	config   map[string]interface{}
 	enabled  bool
 }
 
@@ -81,5 +81,20 @@ func (svc *EngineService) SendHeartbeat(ctx context.Context) error {
 		svc.spec.state.generation,
 	)
 	svc.spec.state.seq_no += 1
+	return nil
+}
+
+func (svc *EngineService) LoadSpec(ctx context.Context) error {
+	specResp, err := svc.client.GetSpec(ctx, svc.spec.engineId)
+	if err != nil {
+		return fmt.Errorf("get spec: %w", err)
+	}
+
+	if specResp.Generation != svc.spec.state.generation {
+		svc.spec.config = specResp.Config
+		svc.spec.enabled = specResp.Enabled
+		svc.spec.state.generation = specResp.Generation
+	}
+
 	return nil
 }
