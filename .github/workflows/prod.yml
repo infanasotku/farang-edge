@@ -1,0 +1,26 @@
+name: prod
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  build:
+    name: Build prod
+    runs-on: ubuntu-latest
+    environment: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build prod
+        uses: ./.github/actions/build
+        with:
+          environment: prod
+          registry_url: ${{ vars.REGISTRY_URL }}
+          registry_username: ${{ secrets.REGISTRY_USERNAME }}
+          registry_password: ${{ secrets.REGISTRY_PASSWORD }}
