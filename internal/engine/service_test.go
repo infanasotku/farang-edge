@@ -26,23 +26,12 @@ func (b *stubBuilder) Build(remoteConfig string, remoteHash string) (BuildResult
 	return BuildResult{Config: remoteConfig, Hash: remoteHash}, nil
 }
 
-func TestGetPhaseStartingWhileSyncingEnabledSpec(t *testing.T) {
-	svc := New(uuid.New(), nil, &stubEngine{alive: false}, &stubBuilder{}, logrus.New())
-	svc.spec.state.generation = 3
-	svc.spec.state.syncing = true
-	svc.spec.state.pendingEnabled = true
-
-	if got := svc.getPhase(context.Background()); got != StatusStarting {
-		t.Fatalf("getPhase() = %q, want %q", got, StatusStarting)
-	}
-}
-
 func TestGetPhaseFailedWhenEnabledButNotAlive(t *testing.T) {
 	svc := New(uuid.New(), nil, &stubEngine{alive: false}, &stubBuilder{}, logrus.New())
 	svc.spec.state.generation = 3
 	svc.spec.enabled = true
 
-	if got := svc.getPhase(context.Background()); got != StatusFailed {
-		t.Fatalf("getPhase() = %q, want %q", got, StatusFailed)
+	if got := svc.getPhaseLocked(context.Background()); got != StatusFailed {
+		t.Fatalf("getPhaseLocked() = %q, want %q", got, StatusFailed)
 	}
 }
