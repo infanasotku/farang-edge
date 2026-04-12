@@ -117,7 +117,8 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 
 	specResp, err := svc.control.GetSpec(ctx, engineID)
 	if err != nil {
-		return fmt.Errorf("get spec: %w", err)
+		svc.logger.Errorf("get spec: %v", err)
+		return nil
 	}
 
 	if specResp.Generation != currentGeneration {

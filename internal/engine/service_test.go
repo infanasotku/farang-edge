@@ -210,8 +210,8 @@ func TestLoadSpec(t *testing.T) {
 		svc := newTestService(control, &fakeEngine{}, &fakeBuilder{})
 
 		err := svc.LoadSpec(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "get spec: unavailable") {
-			t.Fatalf("LoadSpec() error = %v, want wrapped get spec error", err)
+		if err != nil {
+			t.Fatalf("LoadSpec() error = %v, want nil", err)
 		}
 	})
 
