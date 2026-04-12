@@ -40,11 +40,11 @@ func (e *Engine) Apply(config string, configHash string, enabled bool) error {
 
 	configChanged := configHash != e.configHash
 	if configChanged {
-		e.configHash = configHash
 		err := e.setConfig(config)
 		if err != nil {
 			return fmt.Errorf("set config: %w", err)
 		}
+		e.configHash = configHash
 	}
 
 	if enabled {
@@ -75,9 +75,15 @@ func (e *Engine) IsAlive(ctx context.Context) bool {
 	defer conn.Close()
 
 	client := observatorypb.NewObservatoryServiceClient(conn)
-	_, err = client.GetOutboundStatus(ctx, &observatorypb.GetOutboundStatusRequest{})
+	resp, err := client.GetOutboundStatus(ctx, &observatorypb.GetOutboundStatusRequest{})
 	if err != nil {
 		return false
+	}
+
+	for _, status := range resp.Status.Status {
+		if !status.Alive {
+			return false
+		}
 	}
 
 	return true

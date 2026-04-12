@@ -114,18 +114,18 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 
 	effective, err := svc.cfgBuilder.Build(snapshot.Config, snapshot.ConfigHash)
 	if err != nil {
-		svc.logger.Printf("Failed to build effective config: %v, no operation performed", err)
+		svc.logger.Errorf("Failed to build effective config: %v, no operation performed", err)
 		return nil
 	}
 
 	err = svc.engine.Apply(effective.Config, effective.Hash, snapshot.Enabled)
 	if err != nil {
-		svc.logger.Printf("Failed to apply new spec: %v, rolling back...", err)
+		svc.logger.Errorf("Failed to apply new spec: %v, rolling back...", err)
 		rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
 		if rollbackErr != nil {
 			return fmt.Errorf("failed to rollback engine config: %w", rollbackErr)
 		}
-		svc.logger.Printf("Successfully rolled back to previous engine config")
+		svc.logger.Warningf("Successfully rolled back to previous engine config")
 		return nil
 	}
 
