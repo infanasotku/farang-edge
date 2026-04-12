@@ -32,3 +32,12 @@ type Engine interface {
 	Apply(config string, configHash string, enabled bool) error
 	IsAlive() bool
 }
+
+type CfgBulder interface {
+	Build(remoteConfig string, remoteHash string) (BuildResult, error)
+}
+
+type BuildResult struct {
+	Config string
+	Hash   string
+}

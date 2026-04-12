@@ -34,21 +34,23 @@ type EngineSpec struct {
 }
 
 type Service struct {
-	spec    *EngineSpec
-	control ControlPlane
-	engine  Engine
-	logger  *logrus.Entry
+	spec       *EngineSpec
+	control    ControlPlane
+	engine     Engine
+	cfgBuilder CfgBulder
+	logger     *logrus.Entry
 }
 
-func New(engineId uuid.UUID, control ControlPlane, engine Engine, logger *logrus.Logger) *Service {
+func New(engineId uuid.UUID, control ControlPlane, engine Engine, cfgBuilder CfgBulder, logger *logrus.Logger) *Service {
 	return &Service{
 		spec: &EngineSpec{
 			engineId: engineId,
 			state:    &EngineSpecState{instanceId: uuid.New(), seq_no: 1},
 		},
-		control: control,
-		engine:  engine,
-		logger:  logger.WithField("service", "EngineService"),
+		control:    control,
+		engine:     engine,
+		cfgBuilder: cfgBuilder,
+		logger:     logger.WithField("service", "EngineService"),
 	}
 }
 
@@ -109,7 +111,13 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	svc.spec.state.maxSeenGeneration = max(svc.spec.state.maxSeenGeneration, snapshot.Generation)
 
-	err := svc.engine.Apply(snapshot.Config, snapshot.ConfigHash, snapshot.Enabled)
+	effective, err := svc.cfgBuilder.Build(snapshot.Config, snapshot.ConfigHash)
+	if err != nil {
+		svc.logger.Printf("Failed to build effective config: %v, no operation performed", err)
+		return nil
+	}
+
+	err = svc.engine.Apply(effective.Config, effective.Hash, snapshot.Enabled)
 	if err != nil {
 		svc.logger.Printf("Failed to apply new spec: %v, rolling back...", err)
 		rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
@@ -120,8 +128,8 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 		return nil
 	}
 
-	svc.spec.config = snapshot.Config
-	svc.spec.configHash = snapshot.ConfigHash
+	svc.spec.config = effective.Config
+	svc.spec.configHash = effective.Hash
 	svc.spec.enabled = snapshot.Enabled
 	svc.spec.state.generation = snapshot.Generation
 	svc.logger.Printf("Spec is synced with generation %d, enabled: %t", snapshot.Generation, snapshot.Enabled)

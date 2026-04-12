@@ -9,7 +9,6 @@ import (
 	"github.com/infanasotku/farang-edge/internal/config"
 	"github.com/infanasotku/farang-edge/internal/controlapi"
 	"github.com/infanasotku/farang-edge/internal/engine"
-	"github.com/infanasotku/farang-edge/internal/heartbeat"
 	"github.com/infanasotku/farang-edge/internal/specsync"
 	"github.com/infanasotku/farang-edge/internal/xray"
 	"github.com/sirupsen/logrus"
@@ -33,7 +32,14 @@ func New() (*App, error) {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	client := controlapi.New(config.ControlBaseUrl, config.ControlAuthToken, httpClient)
 	xrayEngine := xray.New()
-	svc := engine.New(config.EngineId, client, xrayEngine, logger)
+	cfgBulder := &xray.Builder{Overlay: xray.OverlayConfig{
+		APIListen:         "127.0.0.1:10085",
+		ProbeURL:          "https://www.google.com/generate_204",
+		ProbeInterval:     10 * time.Second,
+		SubjectSelectors:  []string{"direct"},
+		EnableConcurrency: false,
+	}}
+	svc := engine.New(config.EngineId, client, xrayEngine, cfgBulder, logger)
 
 	a := App{logger: logger, config: config, svc: svc}
 	logger.Println("App is created successfully!")
@@ -49,9 +55,9 @@ func (app *App) Run(ctx context.Context) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		return heartbeat.Start(ctx, app.svc, app.logger)
-	})
+	// g.Go(func() error {
+	// 	return heartbeat.Start(ctx, app.svc, app.logger)
+	// })
 	g.Go(func() error {
 		return specsync.Start(ctx, app.svc, app.logger)
 	})
