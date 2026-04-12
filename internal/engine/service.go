@@ -93,7 +93,8 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 
 	err := svc.control.SendHeartbeat(ctx, req)
 	if err != nil {
-		return fmt.Errorf("send heartbeat: %w", err)
+		svc.logger.Errorf("send heartbeat: %v", err)
+		return nil
 	}
 
 	svc.logger.Printf(
@@ -116,7 +117,8 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 
 	specResp, err := svc.control.GetSpec(ctx, engineID)
 	if err != nil {
-		return fmt.Errorf("get spec: %w", err)
+		svc.logger.Errorf("get spec: %v", err)
+		return nil
 	}
 
 	if specResp.Generation != currentGeneration {

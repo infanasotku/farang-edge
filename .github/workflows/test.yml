@@ -1,0 +1,26 @@
+name: test
+on:
+  push:
+    branches:
+      - test
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  build:
+    name: Build test
+    runs-on: ubuntu-latest
+    environment: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build test
+        uses: ./.github/actions/build
+        with:
+          environment: test
+          registry_url: ${{ vars.REGISTRY_URL }}
+          registry_username: ${{ secrets.REGISTRY_USERNAME }}
+          registry_password: ${{ secrets.REGISTRY_PASSWORD }}
