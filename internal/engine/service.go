@@ -23,6 +23,8 @@ type EngineSpecState struct {
 	generation        int64
 	maxSeenGeneration int64
 	instanceId        uuid.UUID
+	syncing           bool
+	pendingEnabled    bool
 	seq_no            int64
 }
 
@@ -111,6 +113,11 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 
 func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	svc.spec.state.maxSeenGeneration = max(svc.spec.state.maxSeenGeneration, snapshot.Generation)
+	svc.spec.state.syncing = true
+	svc.spec.state.pendingEnabled = snapshot.Enabled
+	defer func() {
+		svc.spec.state.syncing = false
+	}()
 
 	effective, err := svc.cfgBuilder.Build(snapshot.Config, snapshot.ConfigHash)
 	if err != nil {
@@ -139,6 +146,13 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 }
 
 func (svc *Service) getPhase(ctx context.Context) Status {
+	if svc.spec.state.syncing {
+		if svc.spec.state.pendingEnabled {
+			return StatusStarting
+		}
+		return StatusIdle
+	}
+
 	if svc.spec.state.generation == 0 {
 		return StatusStarting
 	}

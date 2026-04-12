@@ -62,6 +62,9 @@ func (e *Engine) Apply(config string, configHash string, enabled bool) error {
 }
 
 func (e *Engine) IsAlive(ctx context.Context) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
