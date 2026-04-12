@@ -93,7 +93,8 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 
 	err := svc.control.SendHeartbeat(ctx, req)
 	if err != nil {
-		return fmt.Errorf("send heartbeat: %w", err)
+		svc.logger.Errorf("send heartbeat: %v", err)
+		return nil
 	}
 
 	svc.logger.Printf(
