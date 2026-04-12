@@ -5,21 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/infanasotku/farang-edge/internal/engine"
 )
 
-type OverlayConfig struct {
-	APIListen         string
-	ProbeURL          string
-	ProbeInterval     time.Duration
-	SubjectSelectors  []string
-	EnableConcurrency bool
-}
-
 type Builder struct {
-	Overlay OverlayConfig
+	Runtime RuntimeConfig
 }
 
 func newSHA256(data []byte) string {
@@ -41,15 +32,15 @@ func (b *Builder) Build(remoteConfig string, remoteHash string) (engine.BuildRes
 
 	doc["api"] = map[string]any{
 		"tag":      "api",
-		"listen":   b.Overlay.APIListen,
+		"listen":   b.Runtime.APIListen,
 		"services": []string{"ObservatoryService"},
 	}
 
 	doc["observatory"] = map[string]any{
-		"subjectSelector":   b.Overlay.SubjectSelectors,
-		"probeURL":          b.Overlay.ProbeURL,
-		"probeInterval":     b.Overlay.ProbeInterval.String(),
-		"enableConcurrency": b.Overlay.EnableConcurrency,
+		"subjectSelector":   b.Runtime.SubjectSelectors,
+		"probeURL":          b.Runtime.ProbeURL,
+		"probeInterval":     b.Runtime.ProbeInterval.String(),
+		"enableConcurrency": b.Runtime.EnableConcurrency,
 	}
 
 	raw, err := json.Marshal(doc)
@@ -60,11 +51,11 @@ func (b *Builder) Build(remoteConfig string, remoteHash string) (engine.BuildRes
 	effectiveHash := newSHA256([]byte(
 		"remote=" + remoteHash + "\n" +
 			"overlay_version=v1\n" +
-			"api_listen=" + b.Overlay.APIListen + "\n" +
-			"probe_url=" + b.Overlay.ProbeURL + "\n" +
-			"probe_interval=" + b.Overlay.ProbeInterval.String() + "\n" +
-			"selectors=" + strings.Join(b.Overlay.SubjectSelectors, ",") + "\n" +
-			fmt.Sprintf("enable_concurrency=%t", b.Overlay.EnableConcurrency),
+			"api_listen=" + b.Runtime.APIListen + "\n" +
+			"probe_url=" + b.Runtime.ProbeURL + "\n" +
+			"probe_interval=" + b.Runtime.ProbeInterval.String() + "\n" +
+			"selectors=" + strings.Join(b.Runtime.SubjectSelectors, ",") + "\n" +
+			fmt.Sprintf("enable_concurrency=%t", b.Runtime.EnableConcurrency),
 	))
 
 	return engine.BuildResult{

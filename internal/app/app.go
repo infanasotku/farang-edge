@@ -31,14 +31,17 @@ func New() (*App, error) {
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	client := controlapi.New(config.ControlBaseUrl, config.ControlAuthToken, httpClient)
-	xrayEngine := xray.New()
-	cfgBulder := &xray.Builder{Overlay: xray.OverlayConfig{
+
+	runtimeConfig := xray.RuntimeConfig{
 		APIListen:         "127.0.0.1:10085",
 		ProbeURL:          "https://www.google.com/generate_204",
 		ProbeInterval:     10 * time.Second,
 		SubjectSelectors:  []string{"direct"},
 		EnableConcurrency: false,
-	}}
+	}
+	xrayEngine := xray.New(runtimeConfig)
+	cfgBulder := &xray.Builder{Runtime: runtimeConfig}
+
 	svc := engine.New(config.EngineId, client, xrayEngine, cfgBulder, logger)
 
 	a := App{logger: logger, config: config, svc: svc}

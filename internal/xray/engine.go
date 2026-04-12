@@ -1,23 +1,37 @@
 package xray
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
+	observatorypb "github.com/xtls/xray-core/app/observatory/command"
 	"github.com/xtls/xray-core/core"
 	_ "github.com/xtls/xray-core/main/distro/all" // Important for loading xray engine properly
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
+type RuntimeConfig struct {
+	APIListen         string
+	ProbeURL          string
+	ProbeInterval     time.Duration
+	SubjectSelectors  []string
+	EnableConcurrency bool
+}
+
 type Engine struct {
+	runtime    RuntimeConfig
 	config     *core.Config
 	configHash string
 	instance   *core.Instance
 	mu         sync.Mutex
 }
 
-func New() *Engine {
-	return &Engine{}
+func New(runtime RuntimeConfig) *Engine {
+	return &Engine{runtime: runtime}
 }
 
 func (e *Engine) Apply(config string, configHash string, enabled bool) error {
@@ -47,7 +61,25 @@ func (e *Engine) Apply(config string, configHash string, enabled bool) error {
 	}
 }
 
-func (e *Engine) IsAlive() bool {
+func (e *Engine) IsAlive(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	conn, err := grpc.NewClient(
+		e.runtime.APIListen,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	client := observatorypb.NewObservatoryServiceClient(conn)
+	_, err = client.GetOutboundStatus(ctx, &observatorypb.GetOutboundStatusRequest{})
+	if err != nil {
+		return false
+	}
+
 	return true
 }
 

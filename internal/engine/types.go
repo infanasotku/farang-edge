@@ -30,7 +30,7 @@ type SpecSnapshot struct {
 
 type Engine interface {
 	Apply(config string, configHash string, enabled bool) error
-	IsAlive() bool
+	IsAlive(ctx context.Context) bool
 }
 
 type CfgBulder interface {

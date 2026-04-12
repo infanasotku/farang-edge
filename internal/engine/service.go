@@ -13,6 +13,7 @@ type Status string
 const (
 	StatusStarting   Status = "starting"
 	StatusRunning    Status = "running"
+	StatusFailed     Status = "failed"
 	StatusIdle       Status = "idle"
 	StatusRolledback Status = "rolledback"
 )
@@ -71,7 +72,7 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 		InstanceID: svc.spec.state.instanceId,
 		Epoch:      svc.spec.state.epoch,
 		SeqNo:      svc.spec.state.seq_no,
-		Phase:      svc.getPhase(),
+		Phase:      svc.getPhase(ctx),
 		Generation: svc.spec.state.generation,
 	}
 	err := svc.control.SendHeartbeat(ctx, req)
@@ -137,7 +138,7 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	return nil
 }
 
-func (svc *Service) getPhase() Status {
+func (svc *Service) getPhase(ctx context.Context) Status {
 	if svc.spec.state.generation == 0 {
 		return StatusStarting
 	}
@@ -146,6 +147,11 @@ func (svc *Service) getPhase() Status {
 		return StatusRolledback
 	}
 	if svc.spec.enabled {
+		alive := svc.engine.IsAlive(ctx)
+
+		if !alive {
+			return StatusFailed
+		}
 		return StatusRunning
 	}
 
