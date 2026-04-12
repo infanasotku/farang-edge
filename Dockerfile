@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build ./cmd/main.go -ldflags="-s -w" -o /xray
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /xray ./cmd/main.go
 
 FROM gcr.io/distroless/static-debian12:nonroot AS final
 
