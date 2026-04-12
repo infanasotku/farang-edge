@@ -9,6 +9,7 @@ import (
 	"github.com/infanasotku/farang-edge/internal/config"
 	"github.com/infanasotku/farang-edge/internal/controlapi"
 	"github.com/infanasotku/farang-edge/internal/engine"
+	"github.com/infanasotku/farang-edge/internal/heartbeat"
 	"github.com/infanasotku/farang-edge/internal/specsync"
 	"github.com/infanasotku/farang-edge/internal/xray"
 	"github.com/sirupsen/logrus"
@@ -58,9 +59,9 @@ func (app *App) Run(ctx context.Context) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	// g.Go(func() error {
-	// 	return heartbeat.Start(ctx, app.svc, app.logger)
-	// })
+	g.Go(func() error {
+		return heartbeat.Start(ctx, app.svc, app.logger)
+	})
 	g.Go(func() error {
 		return specsync.Start(ctx, app.svc, app.logger)
 	})

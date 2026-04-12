@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -40,6 +41,7 @@ type Service struct {
 	engine     Engine
 	cfgBuilder CfgBulder
 	logger     *logrus.Entry
+	mu         sync.Mutex
 }
 
 func New(engineId uuid.UUID, control ControlPlane, engine Engine, cfgBuilder CfgBulder, logger *logrus.Logger) *Service {
@@ -56,25 +58,39 @@ func New(engineId uuid.UUID, control ControlPlane, engine Engine, cfgBuilder Cfg
 }
 
 func (svc *Service) Register(ctx context.Context) error {
-	epoch, err := svc.control.RegisterInstance(ctx, svc.spec.engineId, svc.spec.state.instanceId)
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+
+	if svc.spec.state.epoch != 0 {
+		return fmt.Errorf("instance is already registered with epoch %d", svc.spec.state.epoch)
+	}
+
+	engineID := svc.spec.engineId
+	instanceID := svc.spec.state.instanceId
+
+	epoch, err := svc.control.RegisterInstance(ctx, engineID, instanceID)
 	if err != nil {
 		return fmt.Errorf("register instance: %w", err)
 	}
-	svc.logger.Printf("Registered instance %s with epoch %d", svc.spec.state.instanceId, epoch)
+	svc.logger.Printf("Registered instance %s with epoch %d", instanceID, epoch)
 
 	svc.spec.state.epoch = epoch
 	return nil
 }
 
 func (svc *Service) SendHeartbeat(ctx context.Context) error {
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+
 	req := HeartbeatRequest{
 		EngineID:   svc.spec.engineId,
 		InstanceID: svc.spec.state.instanceId,
 		Epoch:      svc.spec.state.epoch,
 		SeqNo:      svc.spec.state.seq_no,
-		Phase:      svc.getPhase(ctx),
 		Generation: svc.spec.state.generation,
 	}
+	req.Phase = svc.getPhaseLocked(ctx)
+
 	err := svc.control.SendHeartbeat(ctx, req)
 	if err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
@@ -82,25 +98,31 @@ func (svc *Service) SendHeartbeat(ctx context.Context) error {
 
 	svc.logger.Printf(
 		"Sent heartbeat with epoch %d, seq_no %d, phase %s, generation %d",
-		svc.spec.state.epoch,
-		svc.spec.state.seq_no,
+		req.Epoch,
+		req.SeqNo,
 		string(req.Phase),
-		svc.spec.state.generation,
+		req.Generation,
 	)
 	svc.spec.state.seq_no += 1
 	return nil
 }
 
 func (svc *Service) LoadSpec(ctx context.Context) error {
-	specResp, err := svc.control.GetSpec(ctx, svc.spec.engineId)
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+
+	engineID := svc.spec.engineId
+	currentGeneration := svc.spec.state.generation
+
+	specResp, err := svc.control.GetSpec(ctx, engineID)
 	if err != nil {
 		return fmt.Errorf("get spec: %w", err)
 	}
 
-	if specResp.Generation != svc.spec.state.generation {
+	if specResp.Generation != currentGeneration {
 		svc.logger.Printf(
 			"Spec generation changed from %d to %d, syncing spec...",
-			svc.spec.state.generation,
+			currentGeneration,
 			specResp.Generation,
 		)
 		return svc.syncState(&specResp)
@@ -111,6 +133,9 @@ func (svc *Service) LoadSpec(ctx context.Context) error {
 
 func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	svc.spec.state.maxSeenGeneration = max(svc.spec.state.maxSeenGeneration, snapshot.Generation)
+	prevConfig := svc.spec.config
+	prevConfigHash := svc.spec.configHash
+	prevEnabled := svc.spec.enabled
 
 	effective, err := svc.cfgBuilder.Build(snapshot.Config, snapshot.ConfigHash)
 	if err != nil {
@@ -121,7 +146,7 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	err = svc.engine.Apply(effective.Config, effective.Hash, snapshot.Enabled)
 	if err != nil {
 		svc.logger.Errorf("Failed to apply new spec: %v, rolling back...", err)
-		rollbackErr := svc.engine.Apply(svc.spec.config, svc.spec.configHash, svc.spec.enabled)
+		rollbackErr := svc.engine.Apply(prevConfig, prevConfigHash, prevEnabled)
 		if rollbackErr != nil {
 			return fmt.Errorf("failed to rollback engine config: %w", rollbackErr)
 		}
@@ -138,7 +163,7 @@ func (svc *Service) syncState(snapshot *SpecSnapshot) error {
 	return nil
 }
 
-func (svc *Service) getPhase(ctx context.Context) Status {
+func (svc *Service) getPhaseLocked(ctx context.Context) Status {
 	if svc.spec.state.generation == 0 {
 		return StatusStarting
 	}
@@ -146,6 +171,7 @@ func (svc *Service) getPhase(ctx context.Context) Status {
 	if svc.spec.state.maxSeenGeneration > svc.spec.state.generation {
 		return StatusRolledback
 	}
+
 	if svc.spec.enabled {
 		alive := svc.engine.IsAlive(ctx)
 
