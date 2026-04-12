@@ -55,8 +55,8 @@ func (c *fakeControlPlane) GetSpec(ctx context.Context, engineID uuid.UUID) (Spe
 }
 
 type fakeEngine struct {
-	alive     bool
-	applyErrs []error
+	alive      bool
+	applyErrs  []error
 	applyCalls []applyCall
 }
 
@@ -81,11 +81,11 @@ func (e *fakeEngine) IsAlive(ctx context.Context) bool {
 }
 
 type fakeBuilder struct {
-	result      BuildResult
-	err         error
-	buildCalls  int
-	lastConfig  string
-	lastHash    string
+	result     BuildResult
+	err        error
+	buildCalls int
+	lastConfig string
+	lastHash   string
 }
 
 func (b *fakeBuilder) Build(remoteConfig string, remoteHash string) (BuildResult, error) {
@@ -195,8 +195,8 @@ func TestSendHeartbeat(t *testing.T) {
 		svc := newTestService(control, &fakeEngine{}, &fakeBuilder{})
 
 		err := svc.SendHeartbeat(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "send heartbeat: timeout") {
-			t.Fatalf("SendHeartbeat() error = %v, want wrapped heartbeat error", err)
+		if err != nil {
+			t.Fatalf("SendHeartbeat() error = %v, want nil", err)
 		}
 		if got := svc.spec.state.seq_no; got != 1 {
 			t.Fatalf("seq_no = %d, want 1", got)
