@@ -39,7 +39,7 @@ jobs:
         run: go test -v ./internal/engine
 
   docker:
-    name: Build xray in docker
+    name: Build docker
     runs-on: ubuntu-latest
     needs: build
 
