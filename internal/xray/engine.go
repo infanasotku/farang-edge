@@ -26,8 +26,10 @@ type Engine struct {
 	runtime    RuntimeConfig
 	config     *core.Config
 	configHash string
-	instance   *core.Instance
-	mu         sync.Mutex
+	instance   interface {
+		Close() error
+	}
+	mu sync.Mutex
 }
 
 func New(runtime RuntimeConfig) *Engine {
@@ -128,14 +130,29 @@ func (e *Engine) ensureDisabled() error {
 		return nil
 	}
 
-	err := e.instance.Close()
-	if err != nil {
+	instance := e.instance
+	if err := closeInstance(instance); err != nil {
 		return err
 	}
+
 	e.instance = nil
 	return nil
 }
 
 func (e *Engine) isEnabled() bool {
 	return e.instance != nil
+}
+
+func closeInstance(instance interface{ Close() error }) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if fmt.Sprint(r) == "close of closed channel" {
+				err = nil
+				return
+			}
+			err = fmt.Errorf("close engine panic: %v", r)
+		}
+	}()
+
+	return instance.Close()
 }
