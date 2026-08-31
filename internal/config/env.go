@@ -9,9 +9,10 @@ import (
 )
 
 type Config struct {
-	ControlBaseUrl   string
-	ControlAuthToken string
-	EngineId         uuid.UUID
+	ControlBaseUrl    string
+	ControlAuthToken  string
+	EngineId          uuid.UUID
+	ReplacementPermit string
 }
 
 func mustEnv(key string) (string, error) {
@@ -41,8 +42,9 @@ func GetAppConfig() (*Config, error) {
 	}
 
 	return &Config{
-		ControlBaseUrl:   controlBaseUrl,
-		ControlAuthToken: controlAuthToken,
-		EngineId:         uuid.MustParse(engineId),
+		ControlBaseUrl:    controlBaseUrl,
+		ControlAuthToken:  controlAuthToken,
+		EngineId:          uuid.MustParse(engineId),
+		ReplacementPermit: os.Getenv("REPLACEMENT_PERMIT"),
 	}, nil
 }

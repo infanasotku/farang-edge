@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build xray
+    name: Test building
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +23,7 @@ jobs:
         run: go build ./cmd/main.go
 
   tests:
-    name: Run tests
+    name: Run go tests
     runs-on: ubuntu-latest
     needs: build
 
@@ -39,7 +39,7 @@ jobs:
         run: go test -v ./internal/engine
 
   docker:
-    name: Build xray in docker
+    name: Test building in docker
     runs-on: ubuntu-latest
     needs: build
 
