@@ -14,6 +14,17 @@ inputs:
     description: "Registry password"
     required: true
 
+outputs:
+  image:
+    description: "Published image tag"
+    value: ${{ steps.image.outputs.reference }}
+  digest:
+    description: "Published image digest"
+    value: ${{ steps.build.outputs.digest }}
+  immutable_image:
+    description: "Published image reference pinned by digest"
+    value: ${{ steps.metadata.outputs.immutable_reference }}
+
 runs:
   using: "composite"
   steps:
@@ -24,11 +35,57 @@ runs:
         username: ${{ inputs.registry_username }}
         password: ${{ inputs.registry_password }}
 
+    - name: Resolve image reference
+      id: image
+      shell: bash
+      env:
+        DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment }}
+        REGISTRY_URL: ${{ inputs.registry_url }}
+      run: |
+        image="${REGISTRY_URL}/farang/edge:${DEPLOYMENT_ENVIRONMENT}-${GITHUB_RUN_NUMBER}"
+        printf 'reference=%s\n' "$image" >> "$GITHUB_OUTPUT"
+
     - name: Build and push image
+      id: build
       uses: docker/build-push-action@v4
       with:
         context: .
         file: Dockerfile
         push: true
-        tags: |
-          ${{ inputs.registry_url }}/farang/edge:${{ inputs.environment }}-${{ github.run_number }}
+        tags: ${{ steps.image.outputs.reference }}
+
+    - name: Publish image reference
+      id: metadata
+      shell: bash
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+        IMAGE: ${{ steps.image.outputs.reference }}
+      run: |
+        if [[ -z "$DIGEST" ]]; then
+          printf '::error::Docker build did not return an image digest\n'
+          exit 1
+        fi
+
+        artifact_dir="${RUNNER_TEMP}/farang-edge-image"
+        artifact_path="${artifact_dir}/image-reference.env"
+        immutable_reference="${IMAGE}@${DIGEST}"
+
+        mkdir -p "$artifact_dir"
+        printf 'IMAGE=%s\nDIGEST=%s\nIMMUTABLE_IMAGE=%s\n' \
+          "$IMAGE" "$DIGEST" "$immutable_reference" > "$artifact_path"
+
+        printf 'artifact_path=%s\n' "$artifact_path" >> "$GITHUB_OUTPUT"
+        printf 'immutable_reference=%s\n' "$immutable_reference" >> "$GITHUB_OUTPUT"
+
+        printf '### Published edge image\n\n' >> "$GITHUB_STEP_SUMMARY"
+        printf '**Tag:** `%s`\n\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+        printf '**Digest:** `%s`\n\n' "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+        printf '**Immutable reference:** `%s`\n\n' "$immutable_reference" >> "$GITHUB_STEP_SUMMARY"
+        printf '```console\ndocker pull %s\n```\n' "$immutable_reference" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload image reference artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: edge-${{ inputs.environment }}-image-${{ github.run_number }}
+        path: ${{ steps.metadata.outputs.artifact_path }}
+        if-no-files-found: error

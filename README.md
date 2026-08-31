@@ -15,3 +15,9 @@ To perform a planned replacement, issue a permit in the Control admin panel, set
 and start it before the permit expires. The edge sends the value only in the `X-Replacement-Permit` header of its
 registration request. It is never added to heartbeat or spec requests and is not logged. Remove the environment value
 after successful registration; the permit is consumed by Control and cannot be reused.
+
+## Published images
+
+Test and production workflows show the published image tag, digest, immutable reference, and pull command in the GitHub
+Actions run summary. Each run also provides an `edge-<environment>-image-<run number>` artifact containing the same
+values in `image-reference.env`, so the image can be located without searching build logs.
