@@ -13,20 +13,28 @@ import (
 )
 
 type Client struct {
-	http      *http.Client
-	baseURL   string
-	authToken string
+	http              *http.Client
+	baseURL           string
+	authToken         string
+	replacementPermit string
 }
 
-func New(baseURL, authToken string, httpClient *http.Client) *Client {
+func New(baseURL, authToken, replacementPermit string, httpClient *http.Client) *Client {
 	return &Client{
-		http:      httpClient,
-		baseURL:   baseURL,
-		authToken: authToken,
+		http:              httpClient,
+		baseURL:           baseURL,
+		authToken:         authToken,
+		replacementPermit: replacementPermit,
 	}
 }
 
-func (c *Client) doRequest(ctx context.Context, path string, method string, payload *map[string]any) (*http.Response, error) {
+func (c *Client) doRequest(
+	ctx context.Context,
+	path string,
+	method string,
+	payload *map[string]any,
+	headers http.Header,
+) (*http.Response, error) {
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
@@ -44,6 +52,11 @@ func (c *Client) doRequest(ctx context.Context, path string, method string, payl
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", c.authToken)
+	for name, values := range headers {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
@@ -82,11 +95,18 @@ type registerInstanceResponse struct {
 }
 
 func (c *Client) RegisterInstance(ctx context.Context, engineId uuid.UUID, instanceId uuid.UUID) (int64, error) {
+	var headers http.Header
+	if c.replacementPermit != "" {
+		headers = make(http.Header)
+		headers.Set("X-Replacement-Permit", c.replacementPermit)
+	}
+
 	resp, err := c.doRequest(
 		ctx,
 		engineId.String()+"/register-instance?instance_id="+instanceId.String(),
 		http.MethodPost,
 		nil,
+		headers,
 	)
 	if err != nil {
 		return -1, err
@@ -115,6 +135,7 @@ func (c *Client) SendHeartbeat(
 			"phase":       req.Phase,
 			"generation":  req.Generation,
 		},
+		nil,
 	)
 	if err != nil {
 		return err
@@ -139,6 +160,7 @@ func (c *Client) GetSpec(ctx context.Context, engineId uuid.UUID) (engine.SpecSn
 		ctx,
 		engineId.String()+"/spec",
 		http.MethodGet,
+		nil,
 		nil,
 	)
 	var specResp getSpecResponse

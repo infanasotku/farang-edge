@@ -31,7 +31,12 @@ func New() (*App, error) {
 	logger.Printf("Config is loaded successfully! ControlBaseUrl: %s, EngineId: %s", config.ControlBaseUrl, config.EngineId)
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
-	client := controlapi.New(config.ControlBaseUrl, config.ControlAuthToken, httpClient)
+	client := controlapi.New(
+		config.ControlBaseUrl,
+		config.ControlAuthToken,
+		config.ReplacementPermit,
+		httpClient,
+	)
 
 	runtimeConfig := xray.RuntimeConfig{
 		APIListen:         "127.0.0.1:10085",
