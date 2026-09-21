@@ -16,7 +16,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.2"
+          go-version: "1.27.1"
       - name: Install dependencies
         run: go mod download
       - name: Run build
@@ -32,11 +32,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.2"
+          go-version: "1.27.1"
       - name: Install dependencies
         run: go mod download
       - name: Run tests
-        run: go test -v ./internal/engine
+        run: go test -v ./...
 
   docker:
     name: Test building in docker
