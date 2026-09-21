@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var HEARTBEAT_INTERVAL = 15
+var HEARTBEAT_INTERVAL = 5
 
 func Start(ctx context.Context, svc *engine.Service, logger *logrus.Logger) error {
 	logger.Println("Starting the heartbeat loop...")
