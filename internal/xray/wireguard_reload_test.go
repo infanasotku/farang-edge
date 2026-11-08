@@ -24,9 +24,6 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
-	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 )
 
 // Exercise the real encrypted data path and retain an outbound reference across
@@ -155,7 +152,7 @@ func startWireGuardPeer(t *testing.T, clientKey *ecdh.PublicKey) (*ecdh.PublicKe
 	if err != nil {
 		t.Fatal(err)
 	}
-	tun, _, stack, err := xwg.CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.77.0.1")}, nil, 1280, true)
+	tun, _, err := xwg.CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.77.0.1")}, nil, 1280, wireGuardEchoHandler{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,24 +180,16 @@ func startWireGuardPeer(t *testing.T, clientKey *ecdh.PublicKey) (*ecdh.PublicKe
 	if port == 0 {
 		t.Fatal("WireGuard peer did not bind a UDP port")
 	}
-	listener, err := gonet.ListenTCP(stack, tcpip.FullAddress{
-		NIC: 1, Addr: tcpip.AddrFrom4([4]byte{10, 77, 0, 1}), Port: 8080,
-	}, ipv4.ProtocolNumber)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = listener.Close() })
-	go func() {
-		for {
-			c, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer c.Close()
-				_, _ = io.Copy(c, c)
-			}()
-		}
-	}()
 	return key.PublicKey(), port
+}
+
+// The upstream userspace stack delivers accepted flows through this handler.
+type wireGuardEchoHandler struct{}
+
+func (wireGuardEchoHandler) HandleConnection(c xnet.Conn, destination xnet.Destination) {
+	defer c.Close()
+	if destination.Network != xnet.Network_TCP || destination.Address.String() != "10.77.0.1" || destination.Port != 8080 {
+		return
+	}
+	_, _ = io.Copy(c, c)
 }
